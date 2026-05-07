@@ -5,6 +5,7 @@ A local, personal job listing aggregator that scrapes Indeed, LinkedIn, and Glas
 Built with Python and vanilla JavaScript. Runs entirely on your own machine — no accounts, no cloud hosting, no subscription.
 
 > **Built with assistance from [GitHub Copilot](https://github.com/features/copilot), powered by Claude Sonnet 4.6.**
+> Styled with [Pico CSS](https://picocss.com/) (MIT licence).
 
 ---
 
@@ -363,4 +364,4 @@ MIT
 
 ---
 
-_Built with assistance from [GitHub Copilot](https://github.com/features/copilot), powered by **Claude Sonnet 4.6**._
+_Built with assistance from [GitHub Copilot](https://github.com/features/copilot), powered by **Claude Sonnet 4.6**. Styled with [Pico CSS](https://picocss.com/) (MIT licence)._

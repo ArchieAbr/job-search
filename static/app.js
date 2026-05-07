@@ -6,7 +6,9 @@ const form = document.getElementById("search-form");
 const searchBtn = document.getElementById("search-btn");
 const statusBar = document.getElementById("status-bar");
 const siteErrorsEl = document.getElementById("site-errors");
-const resultsGrid = document.getElementById("results-grid");
+const resultsTableContainer = document.getElementById(
+  "results-table-container",
+);
 const emptyState = document.getElementById("empty-state");
 const historyList = document.getElementById("history-list");
 
@@ -35,22 +37,25 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
+  const resultsWanted =
+    parseInt(document.getElementById("results_wanted").value, 10) || 50;
+
   const payload = {
     query,
-    location: document.getElementById("location").value.trim(),
+    location: document.getElementById("location").value.trim() || "",
     sites,
     job_type: document.getElementById("job_type").value || null,
     experience_level: document.getElementById("experience_level").value || null,
     is_remote: document.getElementById("is_remote").checked,
-    results_wanted:
-      parseInt(document.getElementById("results_wanted").value, 10) || 50,
+    results_wanted: resultsWanted,
     salary_min: parseNumberOrNull("salary_min"),
-    salary_max: parseNumberOrNull("salary_max"),
   };
+
+  const siteLabels = sites.map(capitalise).join(", ");
 
   setLoading(true);
   showStatus(
-    '<span class="spinner"></span> Searching — this may take 15–30 seconds…',
+    `<span class="spinner"></span> Searching <strong>${siteLabels}</strong> — this may take 15–30 seconds…`,
   );
   clearSiteErrors();
   renderJobs([]);
@@ -68,11 +73,7 @@ form.addEventListener("submit", async (e) => {
       return;
     }
 
-    showStatus(
-      `Found <strong>${data.total_found}</strong> job${data.total_found !== 1 ? "s" : ""} — ` +
-        `<strong>${data.new}</strong> new, ` +
-        `<strong>${data.already_seen}</strong> already seen.`,
-    );
+    showStatus(buildSearchSummary(data));
 
     if (data.site_errors && data.site_errors.length > 0) {
       showSiteErrors(data.site_errors);
@@ -89,10 +90,10 @@ form.addEventListener("submit", async (e) => {
 });
 
 // ---------------------------------------------------------------
-// Render job cards
+// Render results table
 // ---------------------------------------------------------------
 function renderJobs(jobs) {
-  resultsGrid.innerHTML = "";
+  resultsTableContainer.innerHTML = "";
 
   if (!jobs || jobs.length === 0) {
     emptyState.textContent = "No jobs found. Try broadening your search.";
@@ -102,70 +103,81 @@ function renderJobs(jobs) {
 
   emptyState.classList.add("hidden");
 
-  jobs.forEach((job) => {
-    const card = buildJobCard(job);
-    resultsGrid.appendChild(card);
-  });
-}
+  const rows = jobs
+    .map((job) => {
+      const salary = formatSalary(job);
+      const badgeCls = `badge-${(job.site || "other").toLowerCase()}`;
+      const titleCell = job.url
+        ? `<a href="${escapeHtml(job.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(job.title || "Untitled")}</a>`
+        : escapeHtml(job.title || "Untitled");
+      const snippet = (job.description_snippet || "").trim();
 
-function buildJobCard(job) {
-  const card = document.createElement("div");
-  card.className = "job-card";
-  card.dataset.id = job.id || "";
-
-  const salary = formatSalary(job);
-  const snippet = (job.description_snippet || "").trim();
-  const badgeCls = `badge-${(job.site || "other").toLowerCase()}`;
-  const meta = [job.location, job.job_type, job.date_posted]
-    .filter(Boolean)
-    .map((v) => `<span>${escapeHtml(v)}</span>`)
+      return `
+        <tr data-id="${job.id || ""}">
+          <td class="col-title">
+            ${titleCell}
+            ${snippet ? `<p class="row-snippet">${escapeHtml(snippet.slice(0, 160))}${snippet.length > 160 ? "…" : ""}</p>` : ""}
+          </td>
+          <td>${cell(job.company)}</td>
+          <td>${cell(job.location)}</td>
+          <td class="col-salary">${salary ? escapeHtml(salary) : dash()}</td>
+          <td>${cell(job.job_type)}</td>
+          <td>${cell(job.date_posted)}</td>
+          <td><span class="site-badge ${badgeCls}">${escapeHtml(job.site || "unknown")}</span></td>
+          <td class="col-actions">
+            ${job.id ? `<button class="btn-remove" onclick="removeJob(${job.id}, this)" aria-label="Remove">✕</button>` : ""}
+          </td>
+        </tr>`;
+    })
     .join("");
 
-  card.innerHTML = `
-    <div class="job-card-header">
-      <div class="job-title">${escapeHtml(job.title || "Untitled")}</div>
-      <span class="site-badge ${badgeCls}">${escapeHtml(job.site || "unknown")}</span>
-    </div>
-    <div class="job-company">${escapeHtml(job.company || "")}</div>
-    ${meta ? `<div class="job-meta">${meta}</div>` : ""}
-    ${salary ? `<div class="job-salary">${salary}</div>` : ""}
-    ${
-      snippet
-        ? `
-      <div class="job-snippet" id="snippet-${job.id || Math.random()}">${escapeHtml(snippet)}</div>
-      ${
-        snippet.length >= 200
-          ? `<button class="snippet-toggle" onclick="toggleSnippet(this)">Show more</button>`
-          : ""
-      }
-    `
-        : ""
-    }
-    <div class="job-card-footer">
-      ${
-        job.url
-          ? `<a class="btn-view" href="${escapeHtml(job.url)}" target="_blank" rel="noopener noreferrer">View listing</a>`
-          : `<span></span>`
-      }
-      ${
-        job.id
-          ? `<button class="btn-remove" onclick="removeJob(${job.id}, this)">Remove</button>`
-          : ""
-      }
-    </div>
-  `;
-  return card;
+  resultsTableContainer.innerHTML = `
+    <div class="table-wrapper">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Job Title</th>
+            <th>Company</th>
+            <th>Location</th>
+            <th>Salary</th>
+            <th>Type</th>
+            <th>Date Posted</th>
+            <th>Source</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
-// ---------------------------------------------------------------
-// Snippet expand/collapse
-// ---------------------------------------------------------------
-function toggleSnippet(btn) {
-  const snippet = btn.previousElementSibling;
-  const expanded = snippet.style.webkitLineClamp === "unset";
-  snippet.style.webkitLineClamp = expanded ? "" : "unset";
-  snippet.style.display = expanded ? "" : "block";
-  btn.textContent = expanded ? "Show more" : "Show less";
+function cell(value) {
+  return value && value.trim() !== "" ? escapeHtml(value) : dash();
+}
+
+function dash() {
+  return '<span class="not-found" aria-label="Not available">—</span>';
+}
+
+function buildSearchSummary(data) {
+  // Per-site counts computed client-side from the returned jobs list
+  const counts = {};
+  (data.jobs || []).forEach((j) => {
+    const s = j.site || "unknown";
+    counts[s] = (counts[s] || 0) + 1;
+  });
+  const badges = Object.entries(counts)
+    .map(
+      ([s, n]) =>
+        `<span class="site-count-badge badge-${s}">${capitalise(s)}: ${n}</span>`,
+    )
+    .join(" ");
+
+  return (
+    `Found <strong>${data.total_found}</strong> job${data.total_found !== 1 ? "s" : ""}` +
+    (badges ? ` &nbsp;${badges}` : "") +
+    ` — <strong>${data.new}</strong> new, <strong>${data.already_seen}</strong> already seen.`
+  );
 }
 
 // ---------------------------------------------------------------
@@ -175,8 +187,11 @@ async function removeJob(jobId, btn) {
   try {
     const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
     if (res.ok) {
-      btn.closest(".job-card").remove();
-      if (resultsGrid.children.length === 0) {
+      const row = btn.closest("tr");
+      row.remove();
+      const tbody = resultsTableContainer.querySelector("tbody");
+      if (!tbody || tbody.children.length === 0) {
+        resultsTableContainer.innerHTML = "";
         emptyState.textContent = "No jobs found. Try broadening your search.";
         emptyState.classList.remove("hidden");
       }
@@ -304,4 +319,9 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function capitalise(str) {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }

@@ -8,17 +8,15 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
     />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
     <header>
-      <div class="header-inner">
-        <h1>Job Search</h1>
-        <p>
-          Search Indeed, LinkedIn &amp; Glassdoor from one place &mdash; results
-          saved locally
-        </p>
-      </div>
+      <h1>Job Search</h1>
+      <p>
+        Search Indeed, LinkedIn &amp; Glassdoor from one place &mdash; results
+        saved locally
+      </p>
     </header>
 
     <div class="layout">
@@ -107,21 +105,11 @@
 
           <div class="form-row">
             <div class="form-group">
-              <label for="salary_min">Salary min (£)</label>
+              <label for="salary_min">Min salary (£)</label>
               <input
                 type="number"
                 id="salary_min"
                 placeholder="e.g. 40000"
-                min="0"
-                step="1000"
-              />
-            </div>
-            <div class="form-group">
-              <label for="salary_max">Salary max (£)</label>
-              <input
-                type="number"
-                id="salary_max"
-                placeholder="e.g. 80000"
                 min="0"
                 step="1000"
               />
@@ -160,11 +148,11 @@
           <p id="empty-state" class="empty-state">
             Enter a job title above to start searching.
           </p>
-          <div id="results-grid" class="results-grid"></div>
+          <div id="results-table-container"></div>
         </div>
       </main>
     </div>
 
-    <script src="app.js"></script>
+    <script src="/static/app.js"></script>
   </body>
 </html>
