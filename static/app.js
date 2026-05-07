@@ -5,6 +5,7 @@
 const form = document.getElementById("search-form");
 const searchBtn = document.getElementById("search-btn");
 const statusBar = document.getElementById("status-bar");
+const expansionPanel = document.getElementById("expansion-panel");
 const siteErrorsEl = document.getElementById("site-errors");
 const resultsTableContainer = document.getElementById(
   "results-table-container",
@@ -55,8 +56,9 @@ form.addEventListener("submit", async (e) => {
 
   setLoading(true);
   showStatus(
-    `<span class="spinner"></span> Searching <strong>${siteLabels}</strong> — this may take 15–30 seconds…`,
+    `<span class="spinner"></span> Asking AI to interpret your search, then querying <strong>${siteLabels}</strong>…`,
   );
+  clearExpansion();
   clearSiteErrors();
   renderJobs([]);
 
@@ -74,6 +76,7 @@ form.addEventListener("submit", async (e) => {
     }
 
     showStatus(buildSearchSummary(data));
+    showExpansion(data.expansion);
 
     if (data.site_errors && data.site_errors.length > 0) {
       showSiteErrors(data.site_errors);
@@ -240,6 +243,7 @@ async function loadHistoryResults(searchId, li) {
     const res = await fetch(`/api/jobs?search_id=${searchId}`);
     const jobs = await res.json();
     clearSiteErrors();
+    clearExpansion();
     showStatus(
       `Showing saved results for search #${searchId} — ${jobs.length} job${jobs.length !== 1 ? "s" : ""}.`,
     );
@@ -277,6 +281,32 @@ function showSiteErrors(errors) {
 function clearSiteErrors() {
   siteErrorsEl.classList.add("hidden");
   siteErrorsEl.innerHTML = "";
+}
+
+function showExpansion(expansion) {
+  if (!expansion || !expansion.used_ai) {
+    clearExpansion();
+    return;
+  }
+  const termPills = expansion.terms
+    .map((t) => `<span class="expansion-term">${escapeHtml(t)}</span>`)
+    .join(" ");
+  const levelNote = expansion.experience_level_detected
+    ? ` · Auto-detected level: <strong>${escapeHtml(expansion.experience_level_detected)}</strong>`
+    : "";
+  const summary = expansion.summary
+    ? `<p class="expansion-summary">${escapeHtml(expansion.summary)}</p>`
+    : "";
+  expansionPanel.innerHTML = `
+    <span class="expansion-icon">✦</span>
+    ${summary}
+    <div class="expansion-terms-row">Searched for: ${termPills}${levelNote}</div>`;
+  expansionPanel.classList.remove("hidden");
+}
+
+function clearExpansion() {
+  expansionPanel.classList.add("hidden");
+  expansionPanel.innerHTML = "";
 }
 
 function parseNumberOrNull(id) {

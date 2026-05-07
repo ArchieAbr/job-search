@@ -1,6 +1,10 @@
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before anything else reads env vars
+
 from flask import Flask, jsonify, request, send_from_directory
 
 import database
+import expander
 import scraper
 
 app = Flask(__name__, static_folder="static")
@@ -35,45 +39,72 @@ def search():
         return jsonify({"error": "results_wanted and hours_old must be integers"}), 400
 
     salary_min = None
-    salary_max = None
     try:
         if data.get("salary_min") not in (None, ""):
             salary_min = float(data["salary_min"])
-        if data.get("salary_max") not in (None, ""):
-            salary_max = float(data["salary_max"])
     except (TypeError, ValueError):
-        return jsonify({"error": "salary values must be numbers"}), 400
+        return jsonify({"error": "salary_min must be a number"}), 400
 
-    jobs, site_errors = scraper.scrape(
-        query=query,
-        location=location,
-        sites=sites,
-        job_type=job_type,
-        is_remote=is_remote,
-        results_wanted=results_wanted,
-        hours_old=hours_old,
-        salary_min=salary_min,
-        salary_max=salary_max,
-        experience_level=experience_level,
-    )
+    # --- AI query expansion ---
+    expansion = expander.expand_query(query)
+    terms = expansion["terms"]
+
+    # Use AI-detected seniority only if the user didn't explicitly choose one
+    effective_experience = experience_level or expansion["experience_level"]
+
+    # --- Scrape each expanded term, deduplicate by URL ---
+    all_jobs = []
+    all_site_errors = []
+    seen_urls = set()
+
+    for term in terms:
+        jobs, errors = scraper.scrape(
+            query=term,
+            location=location,
+            sites=sites,
+            job_type=job_type,
+            is_remote=is_remote,
+            results_wanted=results_wanted,
+            hours_old=hours_old,
+            salary_min=salary_min,
+            salary_max=None,
+            experience_level=effective_experience,
+        )
+        for job in jobs:
+            url = job.get("url", "")
+            if url and url in seen_urls:
+                continue
+            seen_urls.add(url)
+            all_jobs.append(job)
+
+        # Collect site errors without duplicating per-site entries
+        for err in errors:
+            if not any(e["site"] == err["site"] for e in all_site_errors):
+                all_site_errors.append(err)
 
     search_id = database.insert_search(
         query=query,
         location=location,
         job_type=job_type,
-        experience_level=experience_level,
+        experience_level=effective_experience,
         is_remote=is_remote,
     )
-    inserted, skipped = database.insert_jobs(search_id, jobs)
+    inserted, skipped = database.insert_jobs(search_id, all_jobs)
 
     return jsonify(
         {
             "search_id": search_id,
-            "total_found": len(jobs),
+            "total_found": len(all_jobs),
             "new": inserted,
             "already_seen": skipped,
-            "jobs": jobs,
-            "site_errors": site_errors,
+            "jobs": all_jobs,
+            "site_errors": all_site_errors,
+            "expansion": {
+                "terms": terms,
+                "experience_level_detected": expansion["experience_level"],
+                "summary": expansion["summary"],
+                "used_ai": expansion["expanded"],
+            },
         }
     )
 

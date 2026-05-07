@@ -161,6 +161,49 @@ form select {
 }
 #search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* ===== AI Expansion panel ===== */
+.expansion-panel {
+  background: #f0f4ff;
+  border: 1px solid #c7d2fe;
+  border-left: 4px solid var(--pico-primary);
+  border-radius: var(--pico-border-radius);
+  padding: 0.65rem 1rem;
+  font-size: 0.84rem;
+  color: #374151;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.expansion-icon {
+  color: var(--pico-primary);
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.expansion-summary {
+  margin: 0;
+  color: #4b5563;
+  font-style: italic;
+}
+.expansion-terms-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+.expansion-term {
+  background: #e0e7ff;
+  color: #3730a3;
+  font-weight: 600;
+  font-size: 0.76rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+}
+
 /* ===== Status bar ===== */
 .status-bar {
   background: #eef2ff;
