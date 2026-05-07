@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job Search</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <h1>Job Search</h1>
+        <p>
+          Search Indeed, LinkedIn &amp; Glassdoor from one place &mdash; results
+          saved locally
+        </p>
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- Sidebar: search history -->
+      <aside class="sidebar">
+        <h2>History</h2>
+        <ul id="history-list">
+          <li class="empty-item">No searches yet.</li>
+        </ul>
+      </aside>
+
+      <!-- Main content -->
+      <main class="content">
+        <!-- Search form -->
+        <form id="search-form" novalidate>
+          <div class="form-row">
+            <div class="form-group grow">
+              <label for="query"
+                >Job title / keyword <span class="required">*</span></label
+              >
+              <input
+                type="text"
+                id="query"
+                placeholder="e.g. Python Developer"
+                required
+              />
+            </div>
+            <div class="form-group grow">
+              <label for="location">Location</label>
+              <input
+                type="text"
+                id="location"
+                placeholder="e.g. London, Manchester"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Sites</label>
+              <div class="checkbox-group">
+                <label class="check-label">
+                  <input type="checkbox" name="sites" value="indeed" checked />
+                  Indeed
+                </label>
+                <label class="check-label">
+                  <input
+                    type="checkbox"
+                    name="sites"
+                    value="linkedin"
+                    checked
+                  />
+                  LinkedIn
+                </label>
+                <label
+                  class="check-label"
+                  title="Glassdoor is currently unreliable — their API is frequently blocking requests"
+                >
+                  <input type="checkbox" name="sites" value="glassdoor" />
+                  Glassdoor <span class="site-warn">(unstable)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="job_type">Job type</label>
+              <select id="job_type">
+                <option value="">Any</option>
+                <option value="fulltime">Full-time</option>
+                <option value="parttime">Part-time</option>
+                <option value="contract">Contract</option>
+                <option value="internship">Internship</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="experience_level">Experience</label>
+              <select id="experience_level">
+                <option value="">Any</option>
+                <option value="junior">Junior</option>
+                <option value="mid">Mid-level</option>
+                <option value="senior">Senior</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="salary_min">Salary min (£)</label>
+              <input
+                type="number"
+                id="salary_min"
+                placeholder="e.g. 40000"
+                min="0"
+                step="1000"
+              />
+            </div>
+            <div class="form-group">
+              <label for="salary_max">Salary max (£)</label>
+              <input
+                type="number"
+                id="salary_max"
+                placeholder="e.g. 80000"
+                min="0"
+                step="1000"
+              />
+            </div>
+            <div class="form-group">
+              <label for="results_wanted">Max results</label>
+              <input
+                type="number"
+                id="results_wanted"
+                value="50"
+                min="5"
+                max="200"
+                step="5"
+              />
+            </div>
+            <div class="form-group align-end">
+              <label class="check-label inline-check">
+                <input type="checkbox" id="is_remote" /> Remote only
+              </label>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="search-btn">Search Jobs</button>
+          </div>
+        </form>
+
+        <!-- Status bar -->
+        <div id="status-bar" class="status-bar hidden"></div>
+
+        <!-- Site error warnings -->
+        <div id="site-errors" class="site-errors hidden"></div>
+
+        <!-- Results -->
+        <div id="results-area">
+          <p id="empty-state" class="empty-state">
+            Enter a job title above to start searching.
+          </p>
+          <div id="results-grid" class="results-grid"></div>
+        </div>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
