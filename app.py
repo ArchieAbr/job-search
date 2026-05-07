@@ -3,6 +3,7 @@ load_dotenv()  # Load .env before anything else reads env vars
 
 from flask import Flask, jsonify, request, send_from_directory
 
+import cv_parser
 import database
 import expander
 import scraper
@@ -47,14 +48,28 @@ def search():
 
     # --- AI query expansion (only when user selects AI mode) ---
     use_ai = bool(data.get("use_ai", False))
-    if use_ai:
+    use_cv = bool(data.get("use_cv", False))
+
+    if use_cv:
+        # CV mode: use the pre-analysed terms sent from the frontend
+        cv_terms = [t for t in (data.get("cv_terms") or []) if isinstance(t, str) and t.strip()]
+        if not cv_terms:
+            return jsonify({"error": "CV mode requires cv_terms from a prior /api/analyze-cv call."}), 400
+        # Optionally append user's own keyword if they supplied one
+        if query and query not in cv_terms:
+            cv_terms.append(query)
+        terms = cv_terms
+        cv_experience = data.get("cv_experience_level") or None
+        effective_experience = experience_level or cv_experience
+        expansion = {"terms": terms, "experience_level": effective_experience, "summary": None, "expanded": False}
+    elif use_ai:
         expansion = expander.expand_query(query)
+        terms = expansion["terms"]
+        effective_experience = experience_level or expansion["experience_level"]
     else:
         expansion = {"terms": [query], "experience_level": None, "summary": None, "expanded": False}
-    terms = expansion["terms"]
-
-    # Use AI-detected seniority only if the user didn't explicitly choose one
-    effective_experience = experience_level or expansion["experience_level"]
+        terms = expansion["terms"]
+        effective_experience = experience_level
 
     # --- Scrape each expanded term, deduplicate by URL ---
     all_jobs = []
@@ -146,6 +161,46 @@ def delete_job(job_id):
 @app.route("/api/searches", methods=["GET"])
 def get_searches():
     return jsonify(database.get_searches())
+
+
+@app.route("/api/searches/<int:search_id>", methods=["DELETE"])
+def delete_search(search_id):
+    if not database.delete_search(search_id):
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"deleted": True})
+
+
+@app.route("/api/searches", methods=["DELETE"])
+def delete_all_searches():
+    database.delete_all_searches()
+    return jsonify({"deleted": True})
+
+
+@app.route("/api/analyze-cv", methods=["POST"])
+def analyze_cv():
+    if "cv" not in request.files:
+        return jsonify({"error": "No file uploaded. Send the file as 'cv' in a multipart form."}), 400
+
+    file = request.files["cv"]
+    if not file.filename:
+        return jsonify({"error": "Empty filename."}), 400
+
+    # Limit file size to 5 MB
+    file_bytes = file.read(5 * 1024 * 1024 + 1)
+    if len(file_bytes) > 5 * 1024 * 1024:
+        return jsonify({"error": "File is too large. Maximum size is 5 MB."}), 413
+
+    try:
+        cv_text = cv_parser.extract_text(file_bytes, file.filename)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+
+    analysis = expander.analyze_cv(cv_text)
+
+    if not analysis.get("analyzed") and analysis.get("error"):
+        return jsonify({"error": analysis["error"]}), 503
+
+    return jsonify(analysis)
 
 
 if __name__ == "__main__":

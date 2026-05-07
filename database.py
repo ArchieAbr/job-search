@@ -175,3 +175,25 @@ def get_searches(db_path=None):
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
+
+
+def delete_search(search_id, db_path=None):
+    """Delete a search and all its associated jobs."""
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM jobs WHERE search_id = ?", (search_id,))
+    cursor.execute("DELETE FROM searches WHERE id = ?", (search_id,))
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted > 0
+
+
+def delete_all_searches(db_path=None):
+    """Delete every search and every job."""
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM jobs")
+    cursor.execute("DELETE FROM searches")
+    conn.commit()
+    conn.close()

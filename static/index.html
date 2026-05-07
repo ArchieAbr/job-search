@@ -22,7 +22,17 @@
     <div class="layout">
       <!-- Sidebar: search history -->
       <aside class="sidebar">
-        <h2>History</h2>
+        <div class="sidebar-header">
+          <h2>History</h2>
+          <button
+            type="button"
+            id="clear-all-btn"
+            class="btn-clear-all"
+            title="Delete all search history"
+          >
+            Clear all
+          </button>
+        </div>
         <ul id="history-list">
           <li class="empty-item">No searches yet.</li>
         </ul>
@@ -52,10 +62,36 @@
               >
                 ✦ AI
               </button>
+              <button
+                type="button"
+                class="mode-btn"
+                data-mode="cv"
+                id="mode-cv"
+              >
+                📄 CV
+              </button>
             </div>
             <span id="mode-hint" class="mode-hint"
               >Enter a specific job title or keyword</span
             >
+          </div>
+
+          <!-- CV upload area (shown in CV mode only) -->
+          <div id="cv-upload-area" class="cv-upload-area hidden">
+            <label id="cv-dropzone" class="cv-dropzone" for="cv-file-input">
+              <span class="cv-drop-icon">📄</span>
+              <span class="cv-drop-primary"
+                >Drop your CV here, or <u>browse</u></span
+              >
+              <span class="cv-drop-secondary">PDF, DOCX or TXT · max 5 MB</span>
+              <input
+                type="file"
+                id="cv-file-input"
+                accept=".pdf,.docx,.txt"
+                class="cv-file-hidden"
+              />
+            </label>
+            <div id="cv-status" class="cv-status hidden"></div>
           </div>
 
           <div class="form-row">

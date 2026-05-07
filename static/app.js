@@ -21,10 +21,16 @@ const historyList = document.getElementById("history-list");
 // ---------------------------------------------------------------
 // Mode toggle
 // ---------------------------------------------------------------
-let currentMode = "standard"; // "standard" | "ai"
+let currentMode = "standard"; // "standard" | "ai" | "cv"
+let cvAnalysis = null; // Stores the last successful CV analysis result
 
 const modeHint = document.getElementById("mode-hint");
 const queryInput = document.getElementById("query");
+const queryLabel = document.querySelector('label[for="query"]');
+const cvUploadArea = document.getElementById("cv-upload-area");
+const cvFileInput = document.getElementById("cv-file-input");
+const cvStatusEl = document.getElementById("cv-status");
+const cvDropzone = document.getElementById("cv-dropzone");
 
 document.querySelectorAll(".mode-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -37,14 +43,106 @@ document.querySelectorAll(".mode-btn").forEach((btn) => {
     if (currentMode === "ai") {
       queryInput.placeholder =
         "e.g. creative industry, graduate computer science";
+      queryInput.required = true;
+      queryLabel.innerHTML =
+        'Job title / keyword <span class="required">*</span>';
       modeHint.textContent =
         "Describe what you're looking for — AI will find the best matching roles";
+      cvUploadArea.classList.add("hidden");
+    } else if (currentMode === "cv") {
+      queryInput.placeholder = "Optional — leave blank to use only your CV";
+      queryInput.required = false;
+      queryLabel.innerHTML =
+        'Additional keywords <span class="mode-optional">(optional)</span>';
+      modeHint.textContent =
+        "Upload your CV — Gemini will find roles that match your experience";
+      cvUploadArea.classList.remove("hidden");
     } else {
       queryInput.placeholder = "e.g. Python Developer";
+      queryInput.required = true;
+      queryLabel.innerHTML =
+        'Job title / keyword <span class="required">*</span>';
       modeHint.textContent = "Enter a specific job title or keyword";
+      cvUploadArea.classList.add("hidden");
     }
   });
 });
+
+// ---------------------------------------------------------------
+// CV file upload + analysis
+// ---------------------------------------------------------------
+
+// Drag-and-drop visual feedback
+cvDropzone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  cvDropzone.classList.add("cv-dragover");
+});
+cvDropzone.addEventListener("dragleave", () =>
+  cvDropzone.classList.remove("cv-dragover"),
+);
+cvDropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  cvDropzone.classList.remove("cv-dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) handleCvFile(file);
+});
+
+cvFileInput.addEventListener("change", () => {
+  if (cvFileInput.files[0]) handleCvFile(cvFileInput.files[0]);
+});
+
+async function handleCvFile(file) {
+  cvAnalysis = null;
+  cvDropzone.classList.remove("cv-analyzed");
+
+  // Show loading state
+  cvStatusEl.className = "cv-status cv-status-loading";
+  cvStatusEl.innerHTML =
+    '<span class="cv-spinner"></span> Analysing your CV with Gemini…';
+  cvStatusEl.classList.remove("hidden");
+  cvDropzone.querySelector(".cv-drop-primary").textContent = `📄 ${file.name}`;
+
+  const formData = new FormData();
+  formData.append("cv", file);
+
+  try {
+    const res = await fetch("/api/analyze-cv", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      cvStatusEl.className = "cv-status cv-status-error";
+      cvStatusEl.innerHTML = `⚠ ${escapeHtml(data.error || "Analysis failed.")}`;
+      return;
+    }
+
+    cvAnalysis = data;
+    cvDropzone.classList.add("cv-analyzed");
+
+    const skillPills = (data.skills || [])
+      .map((s) => `<span class="expansion-term">${escapeHtml(s)}</span>`)
+      .join(" ");
+    const levelBadge = data.experience_level
+      ? ` · <strong>${escapeHtml(data.experience_level)}</strong> level`
+      : "";
+    const summary = data.summary
+      ? `<p class="cv-summary">${escapeHtml(data.summary)}</p>`
+      : "";
+
+    cvStatusEl.className = "cv-status cv-status-ok";
+    cvStatusEl.innerHTML = `
+      <div class="cv-result-header">✦ CV analysed${levelBadge}</div>
+      ${summary}
+      <div class="cv-skills-row">${skillPills}</div>
+      <p class="cv-will-search">Will search for: ${(data.terms || []).map((t) => `<em>${escapeHtml(t)}</em>`).join(", ")}</p>`;
+  } catch (err) {
+    cvStatusEl.className = "cv-status cv-status-error";
+    cvStatusEl.innerHTML = "⚠ Could not reach the server.";
+    console.error(err);
+  }
+}
 
 // ---------------------------------------------------------------
 // Initialise
@@ -58,9 +156,21 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const query = document.getElementById("query").value.trim();
-  if (!query) {
-    showStatus("Please enter a job title or keyword.", "error");
-    return;
+
+  // In CV mode the query is optional but we need a CV analysis
+  if (currentMode === "cv") {
+    if (!cvAnalysis) {
+      showStatus(
+        "Please upload and analyse your CV before searching.",
+        "error",
+      );
+      return;
+    }
+  } else {
+    if (!query) {
+      showStatus("Please enter a job title or keyword.", "error");
+      return;
+    }
   }
 
   const sites = [
@@ -74,21 +184,45 @@ form.addEventListener("submit", async (e) => {
   const resultsWanted =
     parseInt(document.getElementById("results_wanted").value, 10) || 50;
 
-  const payload = {
-    query,
-    location: document.getElementById("location").value.trim() || "",
-    sites,
-    job_type: document.getElementById("job_type").value || null,
-    experience_level: document.getElementById("experience_level").value || null,
-    is_remote: document.getElementById("is_remote").checked,
-    results_wanted: resultsWanted,
-    salary_min: parseNumberOrNull("salary_min"),
-    use_ai: currentMode === "ai",
-  };
+  // Build payload — in CV mode inject the CV-derived terms
+  let payload;
+  if (currentMode === "cv") {
+    payload = {
+      query: query || cvAnalysis.terms[0] || "",
+      cv_terms: cvAnalysis.terms,
+      cv_experience_level: cvAnalysis.experience_level,
+      location: document.getElementById("location").value.trim() || "",
+      sites,
+      job_type: document.getElementById("job_type").value || null,
+      experience_level:
+        document.getElementById("experience_level").value ||
+        cvAnalysis.experience_level ||
+        null,
+      is_remote: document.getElementById("is_remote").checked,
+      results_wanted: resultsWanted,
+      salary_min: parseNumberOrNull("salary_min"),
+      use_ai: false,
+      use_cv: true,
+    };
+  } else {
+    payload = {
+      query,
+      location: document.getElementById("location").value.trim() || "",
+      sites,
+      job_type: document.getElementById("job_type").value || null,
+      experience_level:
+        document.getElementById("experience_level").value || null,
+      is_remote: document.getElementById("is_remote").checked,
+      results_wanted: resultsWanted,
+      salary_min: parseNumberOrNull("salary_min"),
+      use_ai: currentMode === "ai",
+      use_cv: false,
+    };
+  }
 
   searchBtn.disabled = true;
   searchBtn.textContent = "Searching…";
-  startProgress(sites, currentMode === "ai");
+  startProgress(sites, currentMode !== "standard");
   clearExpansion();
   clearSiteErrors();
   renderJobs([]);
@@ -109,7 +243,12 @@ form.addEventListener("submit", async (e) => {
 
     stopProgress();
     showStatus(buildSearchSummary(data));
-    showExpansion(data.expansion);
+
+    if (currentMode === "cv" && cvAnalysis) {
+      showCvExpansion(cvAnalysis, data.expansion);
+    } else {
+      showExpansion(data.expansion);
+    }
 
     if (data.site_errors && data.site_errors.length > 0) {
       showSiteErrors(data.site_errors);
@@ -246,27 +385,75 @@ async function loadHistory() {
   try {
     const res = await fetch("/api/searches");
     const searches = await res.json();
+    const clearAllBtn = document.getElementById("clear-all-btn");
 
     if (!Array.isArray(searches) || searches.length === 0) {
       historyList.innerHTML = '<li class="empty-item">No searches yet.</li>';
+      if (clearAllBtn) clearAllBtn.disabled = true;
       return;
     }
 
+    if (clearAllBtn) clearAllBtn.disabled = false;
     historyList.innerHTML = "";
     searches.forEach((s) => {
       const li = document.createElement("li");
       li.dataset.searchId = s.id;
       li.innerHTML = `
-        <span class="hist-query">${escapeHtml(s.query)}</span>
-        <span class="hist-meta">${s.location ? escapeHtml(s.location) + " · " : ""}${formatDate(s.date_run)}</span>
+        <div class="hist-text">
+          <span class="hist-query">${escapeHtml(s.query)}</span>
+          <span class="hist-meta">${s.location ? escapeHtml(s.location) + " · " : ""}${formatDate(s.date_run)}</span>
+        </div>
+        <button class="btn-delete-search" title="Delete this search" aria-label="Delete search">✕</button>
       `;
-      li.addEventListener("click", () => loadHistoryResults(s.id, li));
+      li.querySelector(".hist-text").addEventListener("click", () =>
+        loadHistoryResults(s.id, li),
+      );
+      li.querySelector(".btn-delete-search").addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteSearch(s.id, li);
+      });
       historyList.appendChild(li);
     });
   } catch (err) {
     console.error("Failed to load history:", err);
   }
 }
+
+async function deleteSearch(searchId, li) {
+  try {
+    const res = await fetch(`/api/searches/${searchId}`, { method: "DELETE" });
+    if (res.ok) {
+      li.remove();
+      if (historyList.children.length === 0) {
+        historyList.innerHTML = '<li class="empty-item">No searches yet.</li>';
+        const clearAllBtn = document.getElementById("clear-all-btn");
+        if (clearAllBtn) clearAllBtn.disabled = true;
+      }
+      // If the deleted search's results are currently showing, clear them
+      renderJobs([]);
+      clearSiteErrors();
+      clearExpansion();
+      statusBar.classList.add("hidden");
+    }
+  } catch (err) {
+    console.error("Failed to delete search:", err);
+  }
+}
+
+document.getElementById("clear-all-btn").addEventListener("click", async () => {
+  if (!confirm("Delete all search history and saved jobs?")) return;
+  try {
+    await fetch("/api/searches", { method: "DELETE" });
+    historyList.innerHTML = '<li class="empty-item">No searches yet.</li>';
+    document.getElementById("clear-all-btn").disabled = true;
+    renderJobs([]);
+    clearSiteErrors();
+    clearExpansion();
+    statusBar.classList.add("hidden");
+  } catch (err) {
+    console.error("Failed to clear history:", err);
+  }
+});
 
 async function loadHistoryResults(searchId, li) {
   document
@@ -429,6 +616,29 @@ function showExpansion(expansion) {
     <span class="expansion-icon">✦</span>
     ${summary}
     <div class="expansion-terms-row">Searched for: ${termPills}${levelNote}</div>`;
+  expansionPanel.classList.remove("hidden");
+}
+
+function showCvExpansion(analysis, expansion) {
+  const termPills = (analysis.terms || [])
+    .map((t) => `<span class="expansion-term">${escapeHtml(t)}</span>`)
+    .join(" ");
+  const skillPills = (analysis.skills || [])
+    .map(
+      (s) => `<span class="expansion-term skill-pill">${escapeHtml(s)}</span>`,
+    )
+    .join(" ");
+  const levelNote = analysis.experience_level
+    ? ` · <strong>${escapeHtml(analysis.experience_level)}</strong> level`
+    : "";
+  const summary = analysis.summary
+    ? `<p class="expansion-summary">${escapeHtml(analysis.summary)}</p>`
+    : "";
+  expansionPanel.innerHTML = `
+    <span class="expansion-icon">📄</span>
+    ${summary}
+    <div class="expansion-terms-row">Roles searched: ${termPills}${levelNote}</div>
+    ${skillPills ? `<div class="expansion-terms-row cv-skills-row-panel">Skills detected: ${skillPills}</div>` : ""}`;
   expansionPanel.classList.remove("hidden");
 }
 
