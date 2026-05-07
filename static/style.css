@@ -161,6 +161,100 @@ form select {
 }
 #search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* ===== Mode toggle ===== */
+.mode-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+  flex-wrap: wrap;
+}
+.mode-toggle-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--pico-muted-color, #6b7280);
+}
+.mode-toggle {
+  display: inline-flex;
+  border: 1.5px solid var(--pico-primary);
+  border-radius: 99px;
+  overflow: hidden;
+  background: #fff;
+}
+.mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--pico-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.3rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  width: auto;
+  border-radius: 0;
+  letter-spacing: 0.2px;
+}
+.mode-btn.active {
+  background: var(--pico-primary);
+  color: #fff;
+}
+.mode-btn:not(.active):hover {
+  background: #eef0ff;
+}
+.mode-hint {
+  font-size: 0.78rem;
+  color: var(--pico-muted-color, #9ca3af);
+  font-style: italic;
+}
+
+/* ===== Progress bar (shown during search) ===== */
+.progress-container {
+  background: var(--pico-card-background-color, #fff);
+  border: 1px solid #c7d2fe;
+  border-left: 4px solid var(--pico-primary);
+  border-radius: var(--pico-border-radius);
+  padding: 1rem 1.2rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.2rem;
+}
+.progress-msg {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pico-color, #1a1a2e);
+}
+.progress-pct {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--pico-primary);
+  font-variant-numeric: tabular-nums;
+}
+.progress-sub {
+  font-size: 0.78rem;
+  color: var(--pico-muted-color, #6b7280);
+  margin-bottom: 0.65rem;
+  min-height: 1.1em;
+}
+.progress-track {
+  background: #e5e7eb;
+  border-radius: 99px;
+  height: 7px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--pico-primary) 0%, #7c3aed 100%);
+  width: 0%;
+  transition: width 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* ===== AI Expansion panel ===== */
 .expansion-panel {
   background: #f0f4ff;

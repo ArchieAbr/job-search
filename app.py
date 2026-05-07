@@ -45,8 +45,12 @@ def search():
     except (TypeError, ValueError):
         return jsonify({"error": "salary_min must be a number"}), 400
 
-    # --- AI query expansion ---
-    expansion = expander.expand_query(query)
+    # --- AI query expansion (only when user selects AI mode) ---
+    use_ai = bool(data.get("use_ai", False))
+    if use_ai:
+        expansion = expander.expand_query(query)
+    else:
+        expansion = {"terms": [query], "experience_level": None, "summary": None, "expanded": False}
     terms = expansion["terms"]
 
     # Use AI-detected seniority only if the user didn't explicitly choose one

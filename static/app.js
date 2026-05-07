@@ -5,6 +5,11 @@
 const form = document.getElementById("search-form");
 const searchBtn = document.getElementById("search-btn");
 const statusBar = document.getElementById("status-bar");
+const progressContainer = document.getElementById("progress-container");
+const progressMsg = document.getElementById("progress-msg");
+const progressSub = document.getElementById("progress-sub");
+const progressFill = document.getElementById("progress-fill");
+const progressPct = document.getElementById("progress-pct");
 const expansionPanel = document.getElementById("expansion-panel");
 const siteErrorsEl = document.getElementById("site-errors");
 const resultsTableContainer = document.getElementById(
@@ -12,6 +17,34 @@ const resultsTableContainer = document.getElementById(
 );
 const emptyState = document.getElementById("empty-state");
 const historyList = document.getElementById("history-list");
+
+// ---------------------------------------------------------------
+// Mode toggle
+// ---------------------------------------------------------------
+let currentMode = "standard"; // "standard" | "ai"
+
+const modeHint = document.getElementById("mode-hint");
+const queryInput = document.getElementById("query");
+
+document.querySelectorAll(".mode-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document
+      .querySelectorAll(".mode-btn")
+      .forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentMode = btn.dataset.mode;
+
+    if (currentMode === "ai") {
+      queryInput.placeholder =
+        "e.g. creative industry, graduate computer science";
+      modeHint.textContent =
+        "Describe what you're looking for — AI will find the best matching roles";
+    } else {
+      queryInput.placeholder = "e.g. Python Developer";
+      modeHint.textContent = "Enter a specific job title or keyword";
+    }
+  });
+});
 
 // ---------------------------------------------------------------
 // Initialise
@@ -50,14 +83,12 @@ form.addEventListener("submit", async (e) => {
     is_remote: document.getElementById("is_remote").checked,
     results_wanted: resultsWanted,
     salary_min: parseNumberOrNull("salary_min"),
+    use_ai: currentMode === "ai",
   };
 
-  const siteLabels = sites.map(capitalise).join(", ");
-
-  setLoading(true);
-  showStatus(
-    `<span class="spinner"></span> Asking AI to interpret your search, then querying <strong>${siteLabels}</strong>…`,
-  );
+  searchBtn.disabled = true;
+  searchBtn.textContent = "Searching…";
+  startProgress(sites, currentMode === "ai");
   clearExpansion();
   clearSiteErrors();
   renderJobs([]);
@@ -71,10 +102,12 @@ form.addEventListener("submit", async (e) => {
     const data = await res.json();
 
     if (!res.ok) {
+      stopProgress(false);
       showStatus(data.error || "Search failed.", "error");
       return;
     }
 
+    stopProgress();
     showStatus(buildSearchSummary(data));
     showExpansion(data.expansion);
 
@@ -85,10 +118,12 @@ form.addEventListener("submit", async (e) => {
     renderJobs(data.jobs);
     await loadHistory();
   } catch (err) {
+    stopProgress(false);
     showStatus("Could not reach the server. Is Flask running?", "error");
     console.error(err);
   } finally {
-    setLoading(false);
+    searchBtn.disabled = false;
+    searchBtn.textContent = "Search Jobs";
   }
 });
 
@@ -256,6 +291,99 @@ async function loadHistoryResults(searchId, li) {
 // ---------------------------------------------------------------
 // UI helpers
 // ---------------------------------------------------------------
+
+// --- Progress tracker ---
+let _progressTimers = [];
+
+function buildStages(sites, useAi) {
+  // Timings (ms from search start) are estimates based on real jobspy behaviour.
+  // Gemini call: ~1–3s. Per-site scrape: ~15–25s each.
+  const stages = useAi
+    ? [
+        {
+          pct: 5,
+          msg: "Asking AI to interpret your search…",
+          sub: "Sending your query to Gemini 2.5 Flash",
+          at: 300,
+        },
+        {
+          pct: 20,
+          msg: "Expanding to related job titles…",
+          sub: "Identifying the most relevant roles to search for",
+          at: 2800,
+        },
+      ]
+    : [
+        {
+          pct: 10,
+          msg: "Preparing search…",
+          sub: "Using your query directly",
+          at: 300,
+        },
+      ];
+
+  // Per-site scraping stages — spread 25 % → 88 % across all chosen sites
+  const siteStart = useAi ? 25 : 20;
+  const siteEnd = 88;
+  const pctStep =
+    sites.length > 1
+      ? (siteEnd - siteStart) / sites.length
+      : siteEnd - siteStart;
+  const timePerSite = 18000; // 18 s per site estimate
+  const siteTimeOffset = useAi ? 4000 : 1000;
+
+  sites.forEach((site, i) => {
+    stages.push({
+      pct: Math.round(siteStart + i * pctStep),
+      msg: `Searching ${capitalise(site)}…`,
+      sub: "Scraping live job listings — please wait",
+      at: siteTimeOffset + i * timePerSite,
+    });
+  });
+
+  stages.push({
+    pct: 92,
+    msg: "Compiling results…",
+    sub: "Deduplicating listings across all sources",
+    at: siteTimeOffset + sites.length * timePerSite,
+  });
+
+  return stages;
+}
+
+function setProgress(pct, msg, sub) {
+  // rAF ensures the CSS transition fires correctly after width is set
+  requestAnimationFrame(() => {
+    progressFill.style.width = `${pct}%`;
+    progressPct.textContent = `${pct}%`;
+    progressMsg.textContent = msg;
+    progressSub.textContent = sub || "";
+  });
+}
+
+function startProgress(sites, useAi = false) {
+  statusBar.classList.add("hidden");
+  progressContainer.classList.remove("hidden");
+  setProgress(2, "Preparing search…", "");
+
+  const stages = buildStages(sites, useAi);
+  _progressTimers = stages.map(({ pct, msg, sub, at }) =>
+    setTimeout(() => setProgress(pct, msg, sub), at),
+  );
+}
+
+function stopProgress(success = true) {
+  _progressTimers.forEach(clearTimeout);
+  _progressTimers = [];
+
+  if (success) {
+    setProgress(100, "Done!", "");
+    setTimeout(() => progressContainer.classList.add("hidden"), 600);
+  } else {
+    progressContainer.classList.add("hidden");
+  }
+}
+
 function setLoading(loading) {
   searchBtn.disabled = loading;
   searchBtn.textContent = loading ? "Searching…" : "Search Jobs";

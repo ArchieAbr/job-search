@@ -32,6 +32,32 @@
       <main class="content">
         <!-- Search form -->
         <form id="search-form" novalidate>
+          <!-- Mode toggle -->
+          <div class="mode-toggle-row">
+            <span class="mode-toggle-label">Search mode</span>
+            <div class="mode-toggle" role="group" aria-label="Search mode">
+              <button
+                type="button"
+                class="mode-btn active"
+                data-mode="standard"
+                id="mode-standard"
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                class="mode-btn"
+                data-mode="ai"
+                id="mode-ai"
+              >
+                ✦ AI
+              </button>
+            </div>
+            <span id="mode-hint" class="mode-hint"
+              >Enter a specific job title or keyword</span
+            >
+          </div>
+
           <div class="form-row">
             <div class="form-group grow">
               <label for="query"
@@ -139,6 +165,18 @@
 
         <!-- Status bar -->
         <div id="status-bar" class="status-bar hidden"></div>
+
+        <!-- Progress bar (shown during search) -->
+        <div id="progress-container" class="progress-container hidden">
+          <div class="progress-header">
+            <span id="progress-msg" class="progress-msg">Starting…</span>
+            <span id="progress-pct" class="progress-pct">0%</span>
+          </div>
+          <div class="progress-sub" id="progress-sub"></div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+        </div>
 
         <!-- AI expansion info -->
         <div id="expansion-panel" class="expansion-panel hidden"></div>
