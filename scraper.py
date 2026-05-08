@@ -11,6 +11,21 @@ from jobspy import scrape_jobs
 
 SUPPORTED_SITES = ["indeed", "linkedin", "glassdoor"]
 
+# Words in a location string that indicate a non-UK country. If any of these
+# appear the default UK country setting for Indeed is overridden.
+_US_INDICATORS  = {"usa", "united states", "u.s.", "u.s.a"}
+_AUS_INDICATORS = {"australia", "aus", "sydney", "melbourne", "brisbane"}
+_CA_INDICATORS  = {"canada", "toronto", "vancouver", "montreal"}
+
+# Words that are country/region names rather than city names — stripped when
+# building the location post-filter tokens.
+_COUNTRY_NOISE = {
+    "uk", "u.k.", "united", "kingdom", "england", "scotland",
+    "wales", "ireland", "great", "britain", "gb",
+    "usa", "united", "states", "america",
+    "australia", "canada",
+}
+
 EXPERIENCE_KEYWORDS = {
     "junior": ["junior", "entry", "graduate", "jr.", "jr "],
     "mid": ["mid", "intermediate", "mid-level"],
@@ -70,6 +85,7 @@ def scrape(
 
     all_jobs = _apply_salary_filter(all_jobs, salary_min, salary_max)
     all_jobs = _apply_experience_filter(all_jobs, experience_level)
+    all_jobs = _apply_location_filter(all_jobs, location)
 
     return all_jobs, site_errors
 
@@ -102,6 +118,22 @@ def scrape_site(site, query="software engineer", location="London", results_want
 # ---------------------------------------------------------------------------
 
 
+def _detect_country_indeed(location: str) -> str:
+    """Return the country_indeed value appropriate for the given location string.
+
+    Defaults to 'UK' (since this app is UK-focused / uses GBP salaries).
+    Overrides to other countries when the location string contains clear indicators.
+    """
+    loc_lower = location.lower()
+    if any(ind in loc_lower for ind in _US_INDICATORS):
+        return "USA"
+    if any(ind in loc_lower for ind in _AUS_INDICATORS):
+        return "Australia"
+    if any(ind in loc_lower for ind in _CA_INDICATORS):
+        return "Canada"
+    return "UK"
+
+
 def _scrape_single_site(site, query, location, job_type, is_remote, results_wanted, hours_old):
     """Call jobspy for one site. Returns dict: {status, jobs, error}."""
     try:
@@ -110,7 +142,7 @@ def _scrape_single_site(site, query, location, job_type, is_remote, results_want
         # module-level short-circuit that silences them regardless of hierarchy.
         logging.disable(logging.ERROR)
         try:
-            df = scrape_jobs(
+            kwargs = dict(
                 site_name=[site],
                 search_term=query,
                 location=location,
@@ -119,6 +151,13 @@ def _scrape_single_site(site, query, location, job_type, is_remote, results_want
                 is_remote=is_remote,
                 job_type=job_type,
             )
+            # country_indeed tells jobspy which Indeed locale to hit.
+            # Without this it defaults to the US, causing non-US locations
+            # to match US cities with the same name (e.g. London, Ohio).
+            if site == "indeed" and location:
+                kwargs["country_indeed"] = _detect_country_indeed(location)
+
+            df = scrape_jobs(**kwargs)
         finally:
             logging.disable(logging.NOTSET)
     except Exception as exc:
@@ -169,6 +208,40 @@ def _float(row, col):
         return float(val)
     except (TypeError, ValueError):
         return None
+
+
+def _apply_location_filter(jobs, location: str):
+    """Drop jobs whose returned location clearly doesn't match the requested one.
+
+    Strategy:
+    - Extract meaningful city/town tokens from the requested location (strip
+      country-level noise words).
+    - Keep a job if ANY of those tokens appears in the job's location field
+      (case-insensitive).
+    - Always keep jobs with an empty location field — we don't want to silently
+      discard listings that just didn't populate the field.
+    - Skip the filter entirely if the user didn't supply a location.
+    """
+    if not location or not location.strip():
+        return jobs
+
+    # Build the set of tokens to match against, e.g. "South London, UK" → {"south", "london"}
+    raw_tokens = location.lower().replace(",", " ").split()
+    match_tokens = [t for t in raw_tokens if t not in _COUNTRY_NOISE and len(t) > 2]
+
+    if not match_tokens:
+        return jobs
+
+    filtered = []
+    for job in jobs:
+        job_loc = (job.get("location") or "").lower()
+        if not job_loc:
+            # No location data returned — keep it rather than over-filtering
+            filtered.append(job)
+            continue
+        if any(token in job_loc for token in match_tokens):
+            filtered.append(job)
+    return filtered
 
 
 def _apply_salary_filter(jobs, salary_min, salary_max):

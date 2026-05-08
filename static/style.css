@@ -521,6 +521,17 @@ form select {
   white-space: nowrap;
   text-align: left;
 }
+.th-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+.th-sortable:hover {
+  color: var(--pico-primary);
+}
+.th-active {
+  color: var(--pico-primary);
+}
 
 .results-table td {
   padding: 0.7rem 0.9rem;

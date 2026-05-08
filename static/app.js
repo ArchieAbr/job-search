@@ -269,18 +269,63 @@ form.addEventListener("submit", async (e) => {
 // ---------------------------------------------------------------
 // Render results table
 // ---------------------------------------------------------------
-function renderJobs(jobs) {
-  resultsTableContainer.innerHTML = "";
+// ---------------------------------------------------------------
+// Sorting state
+// ---------------------------------------------------------------
+let _currentJobs = []; // master copy of the last loaded job list
+let _sortKey = null; // field name currently sorted by
+let _sortDir = "asc"; // "asc" | "desc"
 
-  if (!jobs || jobs.length === 0) {
-    emptyState.textContent = "No jobs found. Try broadening your search.";
-    emptyState.classList.remove("hidden");
-    return;
-  }
+// Column definitions: label, sort key (field name or special), sortable flag
+const COLUMNS = [
+  { label: "Job Title", key: "title", sortable: true },
+  { label: "Company", key: "company", sortable: true },
+  { label: "Location", key: "location", sortable: true },
+  { label: "Salary", key: "salary_min", sortable: true },
+  { label: "Type", key: "job_type", sortable: true },
+  { label: "Date Posted", key: "date_posted", sortable: true },
+  { label: "Source", key: "site", sortable: true },
+  { label: "", key: null, sortable: false },
+];
 
-  emptyState.classList.add("hidden");
+function sortJobs(jobs, key, dir) {
+  if (!key) return jobs;
+  return [...jobs].sort((a, b) => {
+    let av = a[key] ?? "";
+    let bv = b[key] ?? "";
+    // Numeric sort for salary
+    if (key === "salary_min") {
+      av = parseFloat(av) || 0;
+      bv = parseFloat(bv) || 0;
+      return dir === "asc" ? av - bv : bv - av;
+    }
+    // Date sort
+    if (key === "date_posted") {
+      av = av ? new Date(av).getTime() : 0;
+      bv = bv ? new Date(bv).getTime() : 0;
+      return dir === "asc" ? av - bv : bv - av;
+    }
+    // String sort
+    av = String(av).toLowerCase();
+    bv = String(bv).toLowerCase();
+    if (av < bv) return dir === "asc" ? -1 : 1;
+    if (av > bv) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+}
 
-  const rows = jobs
+function buildHeaderRow() {
+  return COLUMNS.map((col) => {
+    if (!col.sortable) return `<th></th>`;
+    const isActive = _sortKey === col.key;
+    const indicator = isActive ? (_sortDir === "asc" ? " ▲" : " ▼") : "";
+    const activeClass = isActive ? " th-active" : "";
+    return `<th class="th-sortable${activeClass}" data-sort-key="${col.key}">${col.label}${indicator}</th>`;
+  }).join("");
+}
+
+function buildTbodyRows(jobs) {
+  return jobs
     .map((job) => {
       const salary = formatSalary(job);
       const badgeCls = `badge-${(job.site || "other").toLowerCase()}`;
@@ -288,44 +333,75 @@ function renderJobs(jobs) {
         ? `<a href="${escapeHtml(job.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(job.title || "Untitled")}</a>`
         : escapeHtml(job.title || "Untitled");
       const snippet = (job.description_snippet || "").trim();
-
       return `
-        <tr data-id="${job.id || ""}">
-          <td class="col-title">
-            ${titleCell}
-            ${snippet ? `<p class="row-snippet">${escapeHtml(snippet.slice(0, 160))}${snippet.length > 160 ? "…" : ""}</p>` : ""}
-          </td>
-          <td>${cell(job.company)}</td>
-          <td>${cell(job.location)}</td>
-          <td class="col-salary">${salary ? escapeHtml(salary) : dash()}</td>
-          <td>${cell(job.job_type)}</td>
-          <td>${cell(job.date_posted)}</td>
-          <td><span class="site-badge ${badgeCls}">${escapeHtml(job.site || "unknown")}</span></td>
-          <td class="col-actions">
-            ${job.id ? `<button class="btn-remove" onclick="removeJob(${job.id}, this)" aria-label="Remove">✕</button>` : ""}
-          </td>
-        </tr>`;
+      <tr data-id="${job.id || ""}">
+        <td class="col-title">
+          ${titleCell}
+          ${snippet ? `<p class="row-snippet">${escapeHtml(snippet.slice(0, 160))}${snippet.length > 160 ? "…" : ""}</p>` : ""}
+        </td>
+        <td>${cell(job.company)}</td>
+        <td>${cell(job.location)}</td>
+        <td class="col-salary">${salary ? escapeHtml(salary) : dash()}</td>
+        <td>${cell(job.job_type)}</td>
+        <td>${cell(job.date_posted)}</td>
+        <td><span class="site-badge ${badgeCls}">${escapeHtml(job.site || "unknown")}</span></td>
+        <td class="col-actions">
+          ${job.id ? `<button class="btn-remove" onclick="removeJob(${job.id}, this)" aria-label="Remove">✕</button>` : ""}
+        </td>
+      </tr>`;
     })
     .join("");
+}
+
+function attachSortHandlers() {
+  resultsTableContainer.querySelectorAll(".th-sortable").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sortKey;
+      if (_sortKey === key) {
+        _sortDir = _sortDir === "asc" ? "desc" : "asc";
+      } else {
+        _sortKey = key;
+        _sortDir = "asc";
+      }
+      const sorted = sortJobs(_currentJobs, _sortKey, _sortDir);
+      // Update header indicators without rebuilding the whole table
+      resultsTableContainer.querySelectorAll(".th-sortable").forEach((h) => {
+        const isActive = h.dataset.sortKey === _sortKey;
+        h.classList.toggle("th-active", isActive);
+        const base =
+          COLUMNS.find((c) => c.key === h.dataset.sortKey)?.label ?? "";
+        h.textContent =
+          base + (isActive ? (_sortDir === "asc" ? " ▲" : " ▼") : "");
+      });
+      resultsTableContainer.querySelector("tbody").innerHTML =
+        buildTbodyRows(sorted);
+    });
+  });
+}
+
+function renderJobs(jobs) {
+  _currentJobs = jobs || [];
+  _sortKey = null;
+  _sortDir = "asc";
+  resultsTableContainer.innerHTML = "";
+
+  if (_currentJobs.length === 0) {
+    emptyState.textContent = "No jobs found. Try broadening your search.";
+    emptyState.classList.remove("hidden");
+    return;
+  }
+
+  emptyState.classList.add("hidden");
 
   resultsTableContainer.innerHTML = `
     <div class="table-wrapper">
       <table class="results-table">
-        <thead>
-          <tr>
-            <th>Job Title</th>
-            <th>Company</th>
-            <th>Location</th>
-            <th>Salary</th>
-            <th>Type</th>
-            <th>Date Posted</th>
-            <th>Source</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
+        <thead><tr>${buildHeaderRow()}</tr></thead>
+        <tbody>${buildTbodyRows(_currentJobs)}</tbody>
       </table>
     </div>`;
+
+  attachSortHandlers();
 }
 
 function cell(value) {
@@ -364,6 +440,8 @@ async function removeJob(jobId, btn) {
   try {
     const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
     if (res.ok) {
+      // Keep master list in sync so re-sorting works after removal
+      _currentJobs = _currentJobs.filter((j) => j.id !== jobId);
       const row = btn.closest("tr");
       row.remove();
       const tbody = resultsTableContainer.querySelector("tbody");
